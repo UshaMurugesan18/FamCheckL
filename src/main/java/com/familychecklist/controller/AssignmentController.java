@@ -2,6 +2,7 @@ package com.familychecklist.controller;
 
 import com.familychecklist.model.*;
 import com.familychecklist.service.AssignmentService;
+import com.familychecklist.service.WebPushService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +14,7 @@ import java.util.*;
 public class AssignmentController {
 
     private final AssignmentService svc;
+    private final WebPushService webPushService;
 
     @GetMapping("/member/{memberId}")
     public List<Assignment> byMember(@PathVariable String memberId) {
@@ -46,7 +48,21 @@ public class AssignmentController {
 
         @SuppressWarnings("unchecked")
         List<Map<String, String>> tasks = (List<Map<String, String>>) body.getOrDefault("tasks", List.of());
-        return svc.create(a, tasks);
+        Assignment created = svc.create(a, tasks);
+
+        // Send push notification to member's device
+        try {
+            webPushService.sendPush(
+                created.getMemberId(),
+                "🔔 New Task: " + created.getGroupName(),
+                created.getMemberName() + ", you have a new task assigned!",
+                "/receiver/" + created.getMemberId()
+            );
+        } catch (Exception e) {
+            // Push failure should not fail the API response
+        }
+
+        return created;
     }
 
     @PatchMapping("/{id}/state")
