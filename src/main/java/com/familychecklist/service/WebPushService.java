@@ -50,6 +50,7 @@ public class WebPushService {
 
     public void sendPush(String memberId, String title, String body, String url) {
         List<PushSubscription> subs = pushRepo.findByMemberId(memberId);
+        log.info("[Push] Sending to memberId={} — {} subscription(s) found", memberId, subs.size());
         for (PushSubscription sub : subs) {
             try {
                 String payload = String.format(
@@ -62,12 +63,14 @@ public class WebPushService {
                 );
                 Notification notification = new Notification(subscription, payload);
                 pushService.send(notification);
+                log.info("[Push] Sent OK to endpoint={}...", sub.getEndpoint().substring(0, Math.min(50, sub.getEndpoint().length())));
             } catch (Exception e) {
-                log.warn("Failed to send push to {}: {}", sub.getEndpoint(), e.getMessage());
+                log.warn("[Push] Failed to send to {}: {}", sub.getEndpoint().substring(0, Math.min(50, sub.getEndpoint().length())), e.getMessage());
                 // Remove expired/invalid subscriptions
                 if (e.getMessage() != null &&
                     (e.getMessage().contains("410") || e.getMessage().contains("404"))) {
                     pushRepo.deleteByEndpoint(sub.getEndpoint());
+                    log.info("[Push] Removed expired subscription");
                 }
             }
         }
