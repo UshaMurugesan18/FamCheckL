@@ -1,12 +1,15 @@
 package com.familychecklist.config;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 import javax.sql.DataSource;
 import java.net.URI;
+import java.util.Map;
 
 /**
  * Builds a JDBC DataSource from Railway MySQL environment variables.
@@ -17,9 +20,20 @@ import java.net.URI;
 @Configuration
 public class DataSourceConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(DataSourceConfig.class);
+
     @Bean
     @Primary
     public DataSource dataSource() throws Exception {
+        // Log all env vars so we can see what Railway provides
+        log.info("=== Available environment variables ===");
+        for (Map.Entry<String, String> e : System.getenv().entrySet()) {
+            String key = e.getKey();
+            String val = key.toLowerCase().contains("pass") || key.toLowerCase().contains("secret")
+                    ? "***" : e.getValue();
+            log.info("  {} = {}", key, val);
+        }
+        log.info("=======================================");
         // --- Strategy 1: full URL ---
         String rawUrl = env("MYSQL_URL", env("DATABASE_URL", null));
         if (rawUrl != null && !rawUrl.isBlank()) {
