@@ -1,7 +1,6 @@
 package com.familychecklist.config;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -10,27 +9,51 @@ import javax.sql.DataSource;
 import java.net.URI;
 
 /**
- * Reads Railway's MYSQL_URL (format: mysql://user:pass@host:port/db)
- * and builds a proper JDBC DataSource, bypassing unresolved placeholder issues.
+ * Builds a JDBC DataSource from Railway MySQL environment variables.
+ * Strategy (in order):
+ *   1. MYSQL_URL or DATABASE_URL  — full URL: mysql://user:pass@host:port/db
+ *   2. Individual vars: MYSQLHOST, MYSQLPORT, MYSQLDATABASE, MYSQLUSER, MYSQLPASSWORD
  */
 @Configuration
 public class DataSourceConfig {
 
-    @Value("${MYSQL_URL:}")
-    private String mysqlUrl;
-
     @Bean
     @Primary
     public DataSource dataSource() throws Exception {
-        if (mysqlUrl == null || mysqlUrl.isBlank() || mysqlUrl.startsWith("${")) {
-            throw new IllegalStateException(
-                "MYSQL_URL environment variable is not set. " +
-                "In Railway FamCheckL Variables, add: MYSQL_URL = ${{ MySQL.MYSQL_URL }}"
-            );
+        // --- Strategy 1: full URL ---
+        String rawUrl = env("MYSQL_URL", env("DATABASE_URL", null));
+        if (rawUrl != null && !rawUrl.isBlank()) {
+            return buildFromUrl(rawUrl);
         }
 
-        // Normalize to http:// so java.net.URI can parse it
-        String normalized = mysqlUrl
+        // --- Strategy 2: individual Railway vars (auto-injected for linked services) ---
+        String host = env("MYSQLHOST", env("MYSQL_HOST", null));
+        String port = env("MYSQLPORT", env("MYSQL_PORT", "3306"));
+        String db   = env("MYSQLDATABASE", env("MYSQL_DATABASE", null));
+        String user = env("MYSQLUSER", env("MYSQL_USER", null));
+        String pass = env("MYSQLPASSWORD", env("MYSQL_PASSWORD", null));
+
+        if (host != null && db != null && user != null) {
+            String jdbcUrl = String.format(
+                "jdbc:mysql://%s:%s/%s?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true",
+                host, port, db
+            );
+            HikariDataSource ds = new HikariDataSource();
+            ds.setJdbcUrl(jdbcUrl);
+            ds.setDriverClassName("com.mysql.cj.jdbc.Driver");
+            ds.setUsername(user);
+            if (pass != null) ds.setPassword(pass);
+            return ds;
+        }
+
+        throw new IllegalStateException(
+            "No MySQL connection info found. In Railway FamCheckL Variables, add: " +
+            "MYSQL_URL = ${{ MySQL.MYSQL_URL }}"
+        );
+    }
+
+    private DataSource buildFromUrl(String rawUrl) throws Exception {
+        String normalized = rawUrl
                 .replaceFirst("^mysql2://", "http://")
                 .replaceFirst("^mysql://", "http://");
 
@@ -62,7 +85,11 @@ public class DataSourceConfig {
         ds.setDriverClassName("com.mysql.cj.jdbc.Driver");
         if (user != null) ds.setUsername(user);
         if (pass != null) ds.setPassword(pass);
-
         return ds;
+    }
+
+    private static String env(String name, String defaultValue) {
+        String val = System.getenv(name);
+        return (val != null && !val.isBlank()) ? val : defaultValue;
     }
 }
