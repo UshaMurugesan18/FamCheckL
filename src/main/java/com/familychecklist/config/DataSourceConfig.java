@@ -1,15 +1,12 @@
 package com.familychecklist.config;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 import javax.sql.DataSource;
 import java.net.URI;
-import java.util.stream.Collectors;
 
 /**
  * Builds a JDBC DataSource from Railway MySQL environment variables.
@@ -20,27 +17,9 @@ import java.util.stream.Collectors;
 @Configuration
 public class DataSourceConfig {
 
-    private static final Logger log = LoggerFactory.getLogger(DataSourceConfig.class);
-
     @Bean
     @Primary
     public DataSource dataSource() throws Exception {
-        // Single-line dumps (survives Railway log truncation)
-        String allKeys = System.getenv().keySet().stream().sorted().collect(Collectors.joining(", "));
-        log.info("ALL ENV VAR NAMES: {}", allKeys);
-
-        String mysqlVars = System.getenv().entrySet().stream()
-            .filter(e -> e.getKey().toLowerCase().contains("mysql")
-                      || e.getKey().toLowerCase().contains("database")
-                      || e.getKey().toLowerCase().contains("db_")
-                      || e.getKey().toLowerCase().contains("jdbc"))
-            .map(e -> {
-                String k = e.getKey();
-                String v = k.toLowerCase().contains("pass") ? "***" : e.getValue();
-                return k + "=" + v;
-            })
-            .collect(Collectors.joining(" | "));
-        log.info("MYSQL-RELATED VARS: [{}]", mysqlVars.isEmpty() ? "NONE" : mysqlVars);
         // --- Strategy 1: full URL ---
         String rawUrl = env("MYSQL_URL", env("DATABASE_URL", null));
         if (rawUrl != null && !rawUrl.isBlank()) {
