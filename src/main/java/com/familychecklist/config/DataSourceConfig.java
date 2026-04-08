@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Primary;
 
 import javax.sql.DataSource;
 import java.net.URI;
-import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Builds a JDBC DataSource from Railway MySQL environment variables.
@@ -25,15 +25,22 @@ public class DataSourceConfig {
     @Bean
     @Primary
     public DataSource dataSource() throws Exception {
-        // Log all env vars so we can see what Railway provides
-        log.info("=== Available environment variables ===");
-        for (Map.Entry<String, String> e : System.getenv().entrySet()) {
-            String key = e.getKey();
-            String val = key.toLowerCase().contains("pass") || key.toLowerCase().contains("secret")
-                    ? "***" : e.getValue();
-            log.info("  {} = {}", key, val);
-        }
-        log.info("=======================================");
+        // Single-line dumps (survives Railway log truncation)
+        String allKeys = System.getenv().keySet().stream().sorted().collect(Collectors.joining(", "));
+        log.info("ALL ENV VAR NAMES: {}", allKeys);
+
+        String mysqlVars = System.getenv().entrySet().stream()
+            .filter(e -> e.getKey().toLowerCase().contains("mysql")
+                      || e.getKey().toLowerCase().contains("database")
+                      || e.getKey().toLowerCase().contains("db_")
+                      || e.getKey().toLowerCase().contains("jdbc"))
+            .map(e -> {
+                String k = e.getKey();
+                String v = k.toLowerCase().contains("pass") ? "***" : e.getValue();
+                return k + "=" + v;
+            })
+            .collect(Collectors.joining(" | "));
+        log.info("MYSQL-RELATED VARS: [{}]", mysqlVars.isEmpty() ? "NONE" : mysqlVars);
         // --- Strategy 1: full URL ---
         String rawUrl = env("MYSQL_URL", env("DATABASE_URL", null));
         if (rawUrl != null && !rawUrl.isBlank()) {
