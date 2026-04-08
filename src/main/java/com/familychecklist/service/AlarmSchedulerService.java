@@ -12,10 +12,9 @@ import java.time.LocalTime;
 import java.util.List;
 
 /**
- * Fires every 5 minutes.
- * For each active assignment whose time window includes NOW,
- * sends a Web Push notification to the receiver's device.
- * The OS shows it on the lock screen — tapping opens the app and triggers voice.
+ * Runs every 1 minute.
+ * For each active assignment inside its time window,
+ * sends a push notification every alarmInterval minutes (2, 5, 10, etc.)
  */
 @Service
 @RequiredArgsConstructor
@@ -25,10 +24,11 @@ public class AlarmSchedulerService {
     private final AssignmentRepository assignmentRepo;
     private final WebPushService webPushService;
 
-    @Scheduled(fixedDelay = 5 * 60 * 1000) // every 5 minutes
+    @Scheduled(fixedDelay = 60 * 1000) // runs every 1 minute
     public void sendAlarms() {
-        String today = LocalDate.now().toString(); // YYYY-MM-DD
+        String today = LocalDate.now().toString();
         LocalTime now = LocalTime.now();
+        int nowMins = now.getHour() * 60 + now.getMinute();
 
         List<Assignment> active = assignmentRepo.findActiveWithTimeWindow(today);
 
@@ -36,15 +36,25 @@ public class AlarmSchedulerService {
             try {
                 LocalTime start = LocalTime.parse(a.getTimeStart());
                 LocalTime end   = LocalTime.parse(a.getTimeEnd());
-                if (now.isBefore(start) || now.isAfter(end)) continue; // outside window
+                int startMins = start.getHour() * 60 + start.getMinute();
+                int endMins   = end.getHour() * 60 + end.getMinute();
+
+                // Outside time window — skip
+                if (nowMins < startMins || nowMins > endMins) continue;
+
+                // Fire at start, then every alarmInterval minutes
+                int interval = (a.getAlarmInterval() != null && a.getAlarmInterval() > 0)
+                    ? a.getAlarmInterval() : 5;
+                int elapsed = nowMins - startMins;
+                if (elapsed != 0 && elapsed % interval != 0) continue;
 
                 webPushService.sendPush(
                     a.getMemberId(),
                     "🔔 Task Reminder: " + a.getGroupName(),
-                    "Hi " + a.getMemberName() + "! Please complete your tasks now. Tap to open.",
+                    "Hi " + a.getMemberName() + "! Please complete your tasks. Tap to open.",
                     "/receiver/" + a.getMemberId()
                 );
-                log.info("Alarm sent to member {} for assignment {}", a.getMemberId(), a.getId());
+                log.info("Alarm sent to {} for '{}' (interval={}min)", a.getMemberName(), a.getGroupName(), interval);
             } catch (Exception e) {
                 log.warn("Alarm failed for assignment {}: {}", a.getId(), e.getMessage());
             }
