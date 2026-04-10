@@ -43,8 +43,7 @@ public class AlarmSchedulerService {
                 if (nowMins < startMins || nowMins > endMins) continue;
 
                 // Fire at start, then every alarmInterval minutes
-                int interval = (a.getAlarmInterval() != null && a.getAlarmInterval() > 0)
-                    ? a.getAlarmInterval() : 5;
+                int interval = a.getAlarmInterval() > 0 ? a.getAlarmInterval() : 5;
                 int elapsed = nowMins - startMins;
                 if (elapsed != 0 && elapsed % interval != 0) continue;
 
